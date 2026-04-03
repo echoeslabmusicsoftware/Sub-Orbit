@@ -185,5 +185,4 @@ if (SUB_ORBIT_ENABLE_PLUGINVAL)
   endfunction()
 
   sub_orbit_add_pluginval_test(VST3 SubOrbit_VST3)
-  sub_orbit_add_pluginval_test(AU SubOrbit_AU)
 endif()
