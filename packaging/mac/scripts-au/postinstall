@@ -1,0 +1,3 @@
+#!/bin/bash
+xattr -cr "/Library/Audio/Plug-Ins/Components/SUB ORBIT.component" 2>/dev/null
+exit 0
