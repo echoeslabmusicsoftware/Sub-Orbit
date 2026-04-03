@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Cache FetchContent
         uses: actions/cache@v4
         with:
@@ -37,7 +40,7 @@ jobs:
           echo "VST3_PATH=$VST3_PATH" >> "$GITHUB_ENV"
           echo "AU_PATH=$AU_PATH" >> "$GITHUB_ENV"
 
-      - name: Ad-hoc sign (removes linker signatures, adds proper ad-hoc)
+      - name: Ad-hoc codesign
         run: |
           for artefact in "$VST3_PATH" "$AU_PATH"; do
             if [ -n "$artefact" ] && [ -d "$artefact" ]; then
@@ -45,20 +48,40 @@ jobs:
             fi
           done
 
-      - name: Package
+      - name: Build component packages
         run: |
           mkdir -p release-artifacts
-          if [ -n "$VST3_PATH" ]; then
-            ditto -c -k --keepParent "$VST3_PATH" "release-artifacts/SubOrbit-macOS-VST3.zip"
+
+          if [ -n "$VST3_PATH" ] && [ -d "$VST3_PATH" ]; then
+            pkgbuild \
+              --root "$VST3_PATH" \
+              --install-location "/Library/Audio/Plug-Ins/VST3/$(basename "$VST3_PATH")" \
+              --identifier com.echoeslab.suborbit.vst3 \
+              --version "$VERSION" \
+              SubOrbit-VST3.pkg
           fi
-          if [ -n "$AU_PATH" ]; then
-            ditto -c -k --keepParent "$AU_PATH" "release-artifacts/SubOrbit-macOS-AU.zip"
+
+          if [ -n "$AU_PATH" ] && [ -d "$AU_PATH" ]; then
+            pkgbuild \
+              --root "$AU_PATH" \
+              --install-location "/Library/Audio/Plug-Ins/Components/$(basename "$AU_PATH")" \
+              --identifier com.echoeslab.suborbit.au \
+              --version "$VERSION" \
+              SubOrbit-AU.pkg
           fi
+
+      - name: Build installer package
+        run: |
+          productbuild \
+            --distribution packaging/mac/distribution.xml \
+            --resources packaging/mac/ \
+            --package-path . \
+            "release-artifacts/SubOrbit-macOS-Installer.pkg"
 
       - name: Generate checksums
         working-directory: release-artifacts
         run: |
-          for f in *.zip; do
+          for f in *.pkg; do
             shasum -a 256 "$f" >> SHA256SUMS.txt
           done
 
@@ -73,6 +96,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Cache FetchContent
         uses: actions/cache@v4
         with:
@@ -86,20 +113,23 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j 4
 
-      - name: Package
+      - name: Build installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
+        with:
+          path: packaging/windows/installer.iss
+          options: /DMyAppVersion=${{ env.VERSION }}
+
+      - name: Collect artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-artifacts
-          $vst3 = Get-ChildItem -Path "build\SubOrbit_artefacts\Release\VST3" -Filter "*.vst3" -Directory -Recurse | Select-Object -First 1
-          if ($vst3) {
-            Compress-Archive -Path $vst3.FullName -DestinationPath "release-artifacts\SubOrbit-Windows-VST3.zip"
-          }
+          Copy-Item "packaging/windows/Output/*.exe" "release-artifacts/"
 
       - name: Generate checksums
         shell: pwsh
         working-directory: release-artifacts
         run: |
-          Get-ChildItem -Filter "*.zip" | ForEach-Object {
+          Get-ChildItem -Filter "*.exe" | ForEach-Object {
             $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)" | Out-File -Append -Encoding ascii SHA256SUMS.txt
           }
@@ -114,6 +144,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |
@@ -144,10 +177,20 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j 4
 
-      - name: Package
+      - name: Locate artefacts
+        run: |
+          VST3_PATH="$(find build/SubOrbit_artefacts -type d -name '*.vst3' -print -quit)"
+          echo "VST3_PATH=$VST3_PATH" >> "$GITHUB_ENV"
+
+      - name: Build .deb package
         run: |
           mkdir -p release-artifacts
-          VST3_PATH="$(find build/SubOrbit_artefacts -type d -name '*.vst3' -print -quit)"
+          chmod +x packaging/linux/build-deb.sh
+          ./packaging/linux/build-deb.sh "$VERSION" "$VST3_PATH"
+          cp suborbit_*.deb release-artifacts/
+
+      - name: Package tar.gz
+        run: |
           if [ -n "$VST3_PATH" ]; then
             tar -czf "release-artifacts/SubOrbit-Linux-VST3.tar.gz" -C "$(dirname "$VST3_PATH")" "$(basename "$VST3_PATH")"
           fi
@@ -155,7 +198,7 @@ jobs:
       - name: Generate checksums
         working-directory: release-artifacts
         run: |
-          sha256sum *.tar.gz > SHA256SUMS.txt 2>/dev/null || true
+          sha256sum *.deb *.tar.gz > SHA256SUMS.txt 2>/dev/null || true
 
       - name: Upload artefacts
         uses: actions/upload-artifact@v4
@@ -169,16 +212,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Download all artefacts
         uses: actions/download-artifact@v4
         with:
           path: all-artifacts
 
-      - name: Consolidate checksums
+      - name: Consolidate release files
         run: |
           mkdir -p release-final
-          cp all-artifacts/release-macos/*.zip release-final/ 2>/dev/null || true
-          cp all-artifacts/release-windows/*.zip release-final/ 2>/dev/null || true
+          cp all-artifacts/release-macos/*.pkg release-final/ 2>/dev/null || true
+          cp all-artifacts/release-windows/*.exe release-final/ 2>/dev/null || true
+          cp all-artifacts/release-linux/*.deb release-final/ 2>/dev/null || true
           cp all-artifacts/release-linux/*.tar.gz release-final/ 2>/dev/null || true
 
           # Merge per-platform checksums into one file
@@ -188,41 +235,39 @@ jobs:
 
       - name: Create release notes
         run: |
-          cat > release-notes.md <<'EOF'
+          cat > release-notes.md <<'NOTES'
           ## Download
 
-          | Platform | VST3 | AU |
-          |----------|------|----|
-          | **macOS** (Universal) | `SubOrbit-macOS-VST3.zip` | `SubOrbit-macOS-AU.zip` |
-          | **Windows** (x64) | `SubOrbit-Windows-VST3.zip` | — |
-          | **Linux** (x64) | `SubOrbit-Linux-VST3.tar.gz` | — |
-
-          ## Verify your download
-
-          Each release includes a `SHA256SUMS.txt` file. To verify:
-
-          **macOS / Linux:**
-          ```bash
-          sha256sum -c SHA256SUMS.txt
-          ```
-
-          **Windows (PowerShell):**
-          ```powershell
-          Get-Content SHA256SUMS.txt | ForEach-Object {
-            $parts = $_ -split '  '
-            $expected = $parts[0]; $file = $parts[1]
-            $actual = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
-            if ($actual -eq $expected) { "OK: $file" } else { "MISMATCH: $file" }
-          }
-          ```
+          | Platform | Installer | Manual |
+          |----------|-----------|--------|
+          | **macOS** (Universal) | `SubOrbit-macOS-Installer.pkg` | -- |
+          | **Windows** (x64) | `SubOrbit-Windows-Installer.exe` | -- |
+          | **Linux** (x64) | `suborbit_VERSION_amd64.deb` | `SubOrbit-Linux-VST3.tar.gz` |
 
           ## Installation
 
-          See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) for platform-specific instructions.
+          **macOS:** Double-click the `.pkg` file and follow the prompts. Both VST3 and AU plugins are installed to the system plugin directories. You may need to right-click the file and select Open the first time, since the installer is not notarized.
 
-          > **Note:** These builds are not code-signed. See INSTALL.md for how to handle OS security warnings.
-          EOF
+          **Windows:** Run the `.exe` installer. The VST3 plugin is installed to `C:\Program Files\Common Files\VST3\`. SmartScreen may show a warning — click "More info" then "Run anyway".
+
+          **Linux:** Install with `sudo dpkg -i suborbit_*.deb` or extract the `.tar.gz` to `~/.vst3/`.
+
+          After installing, rescan plugins in your DAW.
+
+          ## Verify your download
+
+          Each release includes `SHA256SUMS.txt`. To verify:
+
+          ```bash
+          # macOS / Linux
+          sha256sum -c SHA256SUMS.txt
+          ```
+
+          See [INSTALL.md](https://github.com/$REPO/blob/main/INSTALL.md) for more details.
+          NOTES
           sed -i 's/^          //' release-notes.md
+          sed -i "s/VERSION/$VERSION/g" release-notes.md
+          sed -i "s|\$REPO|${{ github.repository }}|g" release-notes.md
 
       - name: Create GitHub Release
         env:

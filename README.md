@@ -63,13 +63,13 @@ Output (Stereo)
 
 ## Download
 
-| Platform | VST3 | AU |
-|----------|------|----|
-| **macOS** (Universal) | [SubOrbit-macOS-VST3.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-macOS-VST3.zip) | [SubOrbit-macOS-AU.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-macOS-AU.zip) |
-| **Windows** (x64) | [SubOrbit-Windows-VST3.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Windows-VST3.zip) | -- |
-| **Linux** (x64) | [SubOrbit-Linux-VST3.tar.gz](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Linux-VST3.tar.gz) | -- |
+| Platform | Installer |
+|----------|-----------|
+| **macOS** (Universal) | [SubOrbit-macOS-Installer.pkg](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-macOS-Installer.pkg) |
+| **Windows** (x64) | [SubOrbit-Windows-Installer.exe](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Windows-Installer.exe) |
+| **Linux** (x64) | [.deb](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest) \| [.tar.gz](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Linux-VST3.tar.gz) |
 
-See [INSTALL.md](INSTALL.md) for platform-specific installation instructions.
+See [INSTALL.md](INSTALL.md) for installation instructions.
 
 ## Build from Source
 
