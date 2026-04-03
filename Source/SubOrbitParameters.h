@@ -93,4 +93,20 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     return layout;
 }
 
+inline constexpr std::array<std::string_view, 2> getNonAutomatableControlIDs ()
+{
+    return {"monoCheck", "uiScale"};
+}
+
+inline SubOrbitDspParameters readParameters (const juce::AudioProcessorValueTreeState& state)
+{
+    const auto load = [&] (std::string_view id) { return state.getRawParameterValue (std::string{id})->load (); };
+
+    return {load (kOrbitId),
+            load (kRangeHzId),
+            load (kSidechainAmountId),
+            load (kSidechainAttackMsId),
+            load (kSidechainReleaseMsId)};
+}
+
 } // namespace SubOrbitParameters
