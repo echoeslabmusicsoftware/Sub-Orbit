@@ -66,8 +66,7 @@ TipsOverlay::TipsPanel::TipsPanel ()
     addAndMakeVisible (linkButton);
     linkButton.setButtonText ("echoeslabmusic.com");
     linkButton.setURL (juce::URL ("https://www.echoeslabmusic.com"));
-    linkButton.setColour (juce::HyperlinkButton::textColourId,
-                          CRTLookAndFeel::getTerminalGreen ().withAlpha (0.7f));
+    linkButton.setColour (juce::HyperlinkButton::textColourId, CRTLookAndFeel::getTerminalGreen ().withAlpha (0.7f));
     linkButton.setFont (juce::FontOptions (10.0f), false);
 
     // Version label
@@ -112,8 +111,7 @@ void TipsOverlay::TipsPanel::paint (juce::Graphics& g)
     {
         // Bullet point
         g.setColour (dimGreen);
-        g.drawText (juce::String::charToString (0x2022), bulletLeft, y, 10, 18,
-                    juce::Justification::centred, false);
+        g.drawText (juce::String::charToString (0x2022), bulletLeft, y, 10, 18, juce::Justification::centred, false);
 
         // Tip text
         g.setColour (green);

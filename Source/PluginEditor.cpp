@@ -137,7 +137,6 @@ void SubOrbitAudioProcessorEditor::resized ()
     orbitPanel.setBounds (rightRail.removeFromTop (orbitHeight));
     rightRail.removeFromTop (8);
     sidechainPanel.setBounds (rightRail);
-
 }
 
 bool SubOrbitAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
