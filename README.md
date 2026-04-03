@@ -1,6 +1,10 @@
 # SUB ORBIT
 
+[![CI](https://github.com/echoeslabmusicsoftware/Sub-Orbit/actions/workflows/ci.yml/badge.svg)](https://github.com/echoeslabmusicsoftware/Sub-Orbit/actions/workflows/ci.yml)
+
 Mono-safe low-end stereoizer for VST3 and AU. Widens bass frequencies while preserving full mono compatibility.
+
+**[Download latest release](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest)**
 
 ![SUB ORBIT](Resources/sub-orbit-screenshot.png)
 
@@ -57,9 +61,15 @@ Output (Stereo)
 5. Watch the **goniometer** and **correlation meter** to stay mono-safe
 6. Hold **CHECK MONO** to audition the summed output
 
-## Installation
+## Download
 
-See [INSTALL.md](INSTALL.md) for platform-specific instructions (macOS, Windows, Linux).
+| Platform | VST3 | AU |
+|----------|------|----|
+| **macOS** (Universal) | [SubOrbit-macOS-VST3.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-macOS-VST3.zip) | [SubOrbit-macOS-AU.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-macOS-AU.zip) |
+| **Windows** (x64) | [SubOrbit-Windows-VST3.zip](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Windows-VST3.zip) | -- |
+| **Linux** (x64) | [SubOrbit-Linux-VST3.tar.gz](https://github.com/echoeslabmusicsoftware/Sub-Orbit/releases/latest/download/SubOrbit-Linux-VST3.tar.gz) | -- |
+
+See [INSTALL.md](INSTALL.md) for platform-specific installation instructions.
 
 ## Build from Source
 
