@@ -1,0 +1,23 @@
+SUB ORBIT
+Copyright (c) 2026 Echoes Lab
+
+This software is distributed under the MIT License. See LICENSE for details.
+
+Third-Party Notices
+-------------------
+
+PxPlus IBM VGA 9x16 Font
+  Author: VileR (https://int10h.org)
+  Source: The Ultimate Oldschool PC Font Pack
+          https://int10h.org/oldschool-pc-fonts/
+  License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+
+JUCE Framework (v8.0.12)
+  Author: JUCE (Raw Material Software Limited)
+  Source: https://github.com/juce-framework/JUCE
+  License: GNU General Public License v3 (GPLv3) or Commercial
+           https://juce.com/legal/juce-8-licence/
+  Note: JUCE is fetched automatically during build via CMake FetchContent.
+        Binary distributions of this plugin may be subject to JUCE's
+        licensing terms.

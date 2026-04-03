@@ -1,0 +1,176 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  PLUGINVAL_VERSION: v1.0.4
+
+jobs:
+  format-check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: brew install clang-format
+
+      - name: Check clang-format
+        run: |
+          find Source tests -name "*.cpp" -o -name "*.h" \
+            | xargs clang-format --dry-run --Werror
+
+  build-and-test:
+    runs-on: macos-latest
+    env:
+      PLUGINVAL_BIN: ${{ github.workspace }}/pluginval-bin/pluginval.app/Contents/MacOS/pluginval
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-macos-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Download pluginval
+        run: |
+          curl -L "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip" -o pluginval.zip
+          unzip -q pluginval.zip -d pluginval-bin
+          "${PLUGINVAL_BIN}" --version
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DSUB_ORBIT_ENABLE_PLUGINVAL=ON
+          -DSUB_ORBIT_PLUGINVAL_EXECUTABLE="${PLUGINVAL_BIN}"
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run auval (AU validation)
+        run: |
+          AU_PATH="$(find build/SubOrbit_artefacts -type d -name '*.component' -print -quit)"
+          test -n "$AU_PATH"
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$AU_PATH" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auvaltool -v aufx SbOr EchL
+
+      - name: Upload pluginval logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluginval-logs-macos
+          path: build/pluginval-logs
+
+  build-and-test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libfreetype-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            mesa-common-dev \
+            libgl-dev \
+            libcurl4-openssl-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-linux-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  build-and-test-windows:
+    runs-on: windows-latest
+    env:
+      PLUGINVAL_BIN: ${{ github.workspace }}/pluginval-bin/pluginval.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-windows-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Download pluginval
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/${env:PLUGINVAL_VERSION}/pluginval_Windows.zip" -OutFile pluginval.zip
+          Expand-Archive -Path pluginval.zip -DestinationPath pluginval-bin
+          $pluginval = (Get-ChildItem -Path pluginval-bin -Filter pluginval.exe -Recurse | Select-Object -First 1).FullName
+          if (-not $pluginval) { throw "pluginval.exe not found after extraction" }
+          "PLUGINVAL_BIN=$pluginval" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $pluginval --version
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DSUB_ORBIT_ENABLE_PLUGINVAL=ON
+          -DSUB_ORBIT_PLUGINVAL_EXECUTABLE="$env:PLUGINVAL_BIN"
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload pluginval logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluginval-logs-windows
+          path: build/pluginval-logs
+
+  sanitizer-check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-macos-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure with ASan and UBSan
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Test under sanitizers
+        run: ctest --test-dir build --output-on-failure

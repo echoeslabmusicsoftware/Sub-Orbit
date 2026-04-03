@@ -1,0 +1,235 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  BUILD_DIR: build
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-macos-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-macos-
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Locate artefacts
+        run: |
+          VST3_PATH="$(find build/SubOrbit_artefacts/Release/VST3 -type d -name '*.vst3' -print -quit)"
+          AU_PATH="$(find build/SubOrbit_artefacts/Release/AU -type d -name '*.component' -print -quit)"
+          echo "VST3_PATH=$VST3_PATH" >> "$GITHUB_ENV"
+          echo "AU_PATH=$AU_PATH" >> "$GITHUB_ENV"
+
+      - name: Ad-hoc sign (removes linker signatures, adds proper ad-hoc)
+        run: |
+          for artefact in "$VST3_PATH" "$AU_PATH"; do
+            if [ -n "$artefact" ] && [ -d "$artefact" ]; then
+              codesign --force --deep -s - "$artefact"
+            fi
+          done
+
+      - name: Package
+        run: |
+          mkdir -p release-artifacts
+          if [ -n "$VST3_PATH" ]; then
+            ditto -c -k --keepParent "$VST3_PATH" "release-artifacts/SubOrbit-macOS-VST3.zip"
+          fi
+          if [ -n "$AU_PATH" ]; then
+            ditto -c -k --keepParent "$AU_PATH" "release-artifacts/SubOrbit-macOS-AU.zip"
+          fi
+
+      - name: Generate checksums
+        working-directory: release-artifacts
+        run: |
+          for f in *.zip; do
+            shasum -a 256 "$f" >> SHA256SUMS.txt
+          done
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: release-artifacts
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-windows-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-windows-
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-artifacts
+          $vst3 = Get-ChildItem -Path "build\SubOrbit_artefacts\Release\VST3" -Filter "*.vst3" -Directory -Recurse | Select-Object -First 1
+          if ($vst3) {
+            Compress-Archive -Path $vst3.FullName -DestinationPath "release-artifacts\SubOrbit-Windows-VST3.zip"
+          }
+
+      - name: Generate checksums
+        shell: pwsh
+        working-directory: release-artifacts
+        run: |
+          Get-ChildItem -Filter "*.zip" | ForEach-Object {
+            $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -Append -Encoding ascii SHA256SUMS.txt
+          }
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-artifacts
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libfreetype-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            mesa-common-dev \
+            libgl-dev \
+            libcurl4-openssl-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: fetchcontent-linux-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-linux-
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Package
+        run: |
+          mkdir -p release-artifacts
+          VST3_PATH="$(find build/SubOrbit_artefacts -type d -name '*.vst3' -print -quit)"
+          if [ -n "$VST3_PATH" ]; then
+            tar -czf "release-artifacts/SubOrbit-Linux-VST3.tar.gz" -C "$(dirname "$VST3_PATH")" "$(basename "$VST3_PATH")"
+          fi
+
+      - name: Generate checksums
+        working-directory: release-artifacts
+        run: |
+          sha256sum *.tar.gz > SHA256SUMS.txt 2>/dev/null || true
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release-artifacts
+
+  create-release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Consolidate checksums
+        run: |
+          mkdir -p release-final
+          cp all-artifacts/release-macos/*.zip release-final/ 2>/dev/null || true
+          cp all-artifacts/release-windows/*.zip release-final/ 2>/dev/null || true
+          cp all-artifacts/release-linux/*.tar.gz release-final/ 2>/dev/null || true
+
+          # Merge per-platform checksums into one file
+          cat all-artifacts/release-macos/SHA256SUMS.txt >> release-final/SHA256SUMS.txt 2>/dev/null || true
+          cat all-artifacts/release-windows/SHA256SUMS.txt >> release-final/SHA256SUMS.txt 2>/dev/null || true
+          cat all-artifacts/release-linux/SHA256SUMS.txt >> release-final/SHA256SUMS.txt 2>/dev/null || true
+
+      - name: Create release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## Download
+
+          | Platform | VST3 | AU |
+          |----------|------|----|
+          | **macOS** (Universal) | `SubOrbit-macOS-VST3.zip` | `SubOrbit-macOS-AU.zip` |
+          | **Windows** (x64) | `SubOrbit-Windows-VST3.zip` | — |
+          | **Linux** (x64) | `SubOrbit-Linux-VST3.tar.gz` | — |
+
+          ## Verify your download
+
+          Each release includes a `SHA256SUMS.txt` file. To verify:
+
+          **macOS / Linux:**
+          ```bash
+          sha256sum -c SHA256SUMS.txt
+          ```
+
+          **Windows (PowerShell):**
+          ```powershell
+          Get-Content SHA256SUMS.txt | ForEach-Object {
+            $parts = $_ -split '  '
+            $expected = $parts[0]; $file = $parts[1]
+            $actual = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            if ($actual -eq $expected) { "OK: $file" } else { "MISMATCH: $file" }
+          }
+          ```
+
+          ## Installation
+
+          See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) for platform-specific instructions.
+
+          > **Note:** These builds are not code-signed. See INSTALL.md for how to handle OS security warnings.
+          EOF
+          sed -i 's/^          //' release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" \
+            --title "SUB ORBIT $TAG" \
+            --notes-file release-notes.md \
+            release-final/*
