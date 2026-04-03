@@ -1,0 +1,3 @@
+#!/bin/bash
+xattr -cr "/Library/Audio/Plug-Ins/VST3/SUB ORBIT.vst3" 2>/dev/null
+exit 0

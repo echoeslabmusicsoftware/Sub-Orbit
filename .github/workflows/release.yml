@@ -58,6 +58,7 @@ jobs:
               --install-location "/Library/Audio/Plug-Ins/VST3/$(basename "$VST3_PATH")" \
               --identifier com.echoeslab.suborbit.vst3 \
               --version "$VERSION" \
+              --scripts packaging/mac/scripts-vst3 \
               SubOrbit-VST3.pkg
           fi
 
@@ -67,6 +68,7 @@ jobs:
               --install-location "/Library/Audio/Plug-Ins/Components/$(basename "$AU_PATH")" \
               --identifier com.echoeslab.suborbit.au \
               --version "$VERSION" \
+              --scripts packaging/mac/scripts-au \
               SubOrbit-AU.pkg
           fi
 
